@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"io"
 	"os"
@@ -15,7 +16,34 @@ func main() {
 	if err != nil {
 		exit(err)
 	}
-	decodeStream(in)
+	for img := range decodeStream(in){
+		fmt.Println(img.Bounds())
+	}
+}
+
+func exit(x ...interface{}) {
+	fmt.Fprintln(os.Stderr, x...)
+	os.Exit(1)
+}
+
+func decodeStream(input io.Reader) <-chan image.Image {
+	ch := make(chan image.Image)
+
+	go func(){
+	in := bufio.NewReader(input)
+	for {
+		img, err := jpeg.Decode(in)
+		if err != nil {
+			if err.Error() == "unexpected EOF" {
+				close(ch)
+			}
+			fmt.Println(err)
+			continue
+		}
+		ch <- img
+	}
+	}()
+	return ch
 }
 
 func openStream() (io.Reader, error) {
@@ -41,24 +69,4 @@ func openStream() (io.Reader, error) {
 	}
 
 	return stdout, nil
-}
-
-func decodeStream(input io.Reader) {
-	in := bufio.NewReader(input)
-	for {
-		img, err := jpeg.Decode(in)
-		if err != nil {
-			fmt.Println(err)
-			if err.Error() == "unexpected EOF" {
-				exit()
-			}
-			continue
-		}
-		fmt.Println(img.Bounds())
-	}
-}
-
-func exit(x ...interface{}) {
-	fmt.Fprintln(os.Stderr, x...)
-	os.Exit(1)
 }
