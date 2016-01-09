@@ -56,11 +56,12 @@ func main() {
 
 	exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
-	go func() {
-		for {
-			<-stream
-		}
-	}()
+	// sinkhole tests intrinsic performance
+	//go func() {
+	//	for {
+	//		<-stream
+	//	}
+	//}()
 
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
 		exit(err)
