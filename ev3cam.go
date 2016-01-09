@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"image"
@@ -12,17 +11,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 var (
 	flagPort = flag.String("http", ":8080", "webserver port")
 )
+var stream <-chan image.Image
 
 var (
-	stream    <-chan image.Image
-	nDropped  int
-	nPiped    int
-	nStreamed int
+	start      time.Time
+	nErrors    int
+	nDropped   int
+	nProcessed int
+	nStreamed  int
 )
 
 func main() {
@@ -36,9 +38,20 @@ func main() {
 	http.Handle("/cam", appHandler(handleStream))
 	stream = decodeStream(in)
 
+	exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
+
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
 		exit(err)
 	}
+
+}
+
+func printStats() {
+	fps := 0.
+	if (start != time.Time{}) {
+		fps = float64(nStreamed) / time.Since(start).Seconds()
+	}
+	fmt.Printf("errors:%v dropped:%v processed:%v streamed:%v fps:%.1f\n", nErrors, nDropped, nProcessed, nStreamed, fps)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -60,11 +73,12 @@ func handleImg(w http.ResponseWriter, r *http.Request) error {
 }
 
 func handleStream(w http.ResponseWriter, r *http.Request) error {
+	start = time.Now()
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
 	for {
 		img := <-stream
 		fmt.Fprint(w, "--BOUNDARY\r\n"+
-			"Content-Type:image/jpeg\r\n"+
+			"Content-Type: image/jpeg\r\n"+
 			//"Content-Length:" + length + "\r\n" +
 			"\r\n")
 
@@ -73,7 +87,6 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 			fmt.Println(err)
 		}
 		nStreamed++
-		fmt.Println("streamed", nStreamed, "frames")
 	}
 }
 
@@ -92,28 +105,27 @@ func exit(x ...interface{}) {
 	os.Exit(1)
 }
 
-func decodeStream(input io.Reader) <-chan image.Image {
+func decodeStream(in io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
 	go func() {
-		in := bufio.NewReader(input)
+		//in := bufio.NewReader(input)
 		for {
+			printStats()
 			img, err := jpeg.Decode(in)
 			if err != nil {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
 				}
-				fmt.Println(err)
+				nErrors++
+				//fmt.Println(err)
 				continue
 			}
-			fmt.Println(img.Bounds)
 			select {
 			default:
 				nDropped++
-				fmt.Println("dropped", nDropped, "frames")
 			case ch <- img:
-				nPiped++
-				fmt.Println("piped", nPiped, "frames")
+				nProcessed++
 			}
 		}
 	}()
