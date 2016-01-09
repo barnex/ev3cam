@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -45,6 +46,7 @@ var (
 func main() {
 	flag.Parse()
 
+	fifo += path.Base(*flagDev)
 	if err := syscall.Mkfifo(fifo, 0666); err != nil {
 		fmt.Fprintln(os.Stderr, "mkfifo", fifo, ":", err)
 	}
