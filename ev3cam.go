@@ -2,13 +2,26 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"image"
 	"image/jpeg"
 	"io"
+	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+)
+
+var (
+	flagPort = flag.String("http", ":8080", "webserver port")
+)
+
+var (
+	stream   <-chan image.Image
+	nDropped int
+	nPiped   int
 )
 
 func main() {
@@ -16,8 +29,27 @@ func main() {
 	if err != nil {
 		exit(err)
 	}
-	for img := range decodeStream(in){
-		fmt.Println(img.Bounds())
+
+	http.Handle("/img", appHandler(handleImg))
+	stream = decodeStream(in)
+
+	if err := http.ListenAndServe(*flagPort, nil); err != nil {
+		exit(err)
+	}
+}
+
+func handleImg(w http.ResponseWriter, r *http.Request) error {
+	img := <-stream
+	return jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
+}
+
+type appHandler func(w http.ResponseWriter, r *http.Request) error
+
+func (h appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := h(w, r)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), 500)
 	}
 }
 
@@ -29,19 +61,25 @@ func exit(x ...interface{}) {
 func decodeStream(input io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
-	go func(){
-	in := bufio.NewReader(input)
-	for {
-		img, err := jpeg.Decode(in)
-		if err != nil {
-			if err.Error() == "unexpected EOF" {
-				close(ch)
+	go func() {
+		in := bufio.NewReader(input)
+		for {
+			img, err := jpeg.Decode(in)
+			if err != nil {
+				if err.Error() == "unexpected EOF" {
+					close(ch)
+				}
+				fmt.Println(err)
+				continue
 			}
-			fmt.Println(err)
-			continue
+			select {
+			default:
+				nDropped++
+				fmt.Println("dropped", nDropped, "frames")
+			case ch <- img:
+				fmt.Println("piped", nPiped, "frames")
+			}
 		}
-		ch <- img
-	}
 	}()
 	return ch
 }
