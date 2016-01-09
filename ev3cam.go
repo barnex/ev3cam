@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"image"
@@ -16,8 +17,11 @@ import (
 )
 
 var (
-	flagPort = flag.String("http", ":8080", "webserver port")
-	flagFPS  = flag.Int("fps", 10, "maximum frames per second")
+	flagFPS     = flag.Int("fps", 10, "maximum frames per second")
+	flagHeight  = flag.Int("h", 240, "image height in pixels")
+	flagPort    = flag.String("http", ":8080", "webserver port")
+	flagQuality = flag.Int("quality", 25, "jpeg qualtity")
+	flagWidth   = flag.Int("w", 320, "image width in pixels")
 )
 
 var (
@@ -51,6 +55,12 @@ func main() {
 	stream = decodeStream(in)
 
 	exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
+
+	go func() {
+		for {
+			<-stream
+		}
+	}()
 
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
 		exit(err)
@@ -105,7 +115,7 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 			//"Content-Length:" + length + "\r\n" +
 			"\r\n")
 
-		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 25})
+		err := jpeg.Encode(w, img, &jpeg.Options{Quality: *flagQuality})
 		if err != nil {
 			nErrors++
 		}
@@ -132,8 +142,8 @@ func decodeStream(input io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
 	go func() {
-		//in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
-		in := newReader(input)
+		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
+		//in := newReader(input)
 		for {
 			printStats()
 			img, err := jpeg.Decode(in)
@@ -175,7 +185,7 @@ func (r *reader) Read(p []byte) (n int, err error) {
 
 func openStream() (io.Reader, error) {
 	bin := "gst-launch-1.0"
-	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! jpegenc ! filesink buffer-size=0 location=%v`, *flagFPS, fifo)
+	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! videoscale ! video/x-raw,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
 
 	fmt.Println(bin, args)
 	cmd := exec.Command(bin, strings.Split(args, " ")...)
