@@ -1,3 +1,3 @@
 all:
 	goimports -w *.go
-	go build
+	go install

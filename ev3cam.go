@@ -61,10 +61,13 @@ func (t *timer) Stop() {
 }
 
 func (t *timer) String() string {
+	if t.n == 0 {
+		return "0"
+	}
 	return time.Duration(int64(t.total) / t.n).String()
 }
 
-func main(){Main()}
+func main() { Main() }
 
 func Main() {
 	flag.Parse()
