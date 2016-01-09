@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -18,7 +19,11 @@ var (
 	flagPort = flag.String("http", ":8080", "webserver port")
 	flagFPS  = flag.Int("fps", 10, "maximum frames per second")
 )
-var stream <-chan image.Image
+
+var (
+	stream <-chan image.Image
+	fifo   = "fifo"
+)
 
 var (
 	start      time.Time
@@ -26,11 +31,15 @@ var (
 	nDropped   int
 	nProcessed int
 	nStreamed  int
-	nErrors     int
+	nErrors    int
 )
 
 func main() {
 	flag.Parse()
+
+	if err := syscall.Mkfifo(fifo, 0666); err != nil {
+		fmt.Fprintln(os.Stderr, "mkfifo", fifo, ":", err)
+	}
 
 	in, err := openStream()
 	if err != nil {
@@ -62,7 +71,7 @@ func printStats() {
 	s := time.Since(start).Seconds()
 	fps := float64(nStreamed) / s
 	kBps := (float64(nBytes) / 1000) / s
-	eps := (float64(nErrors))/s
+	eps := (float64(nErrors)) / s
 	fmt.Printf("%.1fkB/s, dropped:%v processed:%v streamed:%v fps:%.1f errors/s:%.1f\n", kBps, nDropped, nProcessed, nStreamed, fps, eps)
 }
 
@@ -128,6 +137,7 @@ func decodeStream(input io.Reader) <-chan image.Image {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
 				}
+				fmt.Println(err)
 				nErrors++
 				continue
 			}
@@ -158,7 +168,7 @@ func (r *reader) Read(p []byte) (n int, err error) {
 
 func openStream() (io.Reader, error) {
 	bin := "gst-launch-1.0"
-	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! jpegenc ! filesink buffer-size=0 location=/dev/stdout`, *flagFPS)
+	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! jpegenc ! filesink buffer-size=0 location=%v`, *flagFPS, fifo)
 
 	fmt.Println(bin, args)
 	cmd := exec.Command(bin, strings.Split(args, " ")...)
@@ -173,10 +183,15 @@ func openStream() (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	go io.Copy(os.Stderr, stdout)
 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 
-	return stdout, nil
+	f, err := os.Open(fifo)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
