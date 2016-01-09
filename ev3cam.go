@@ -16,6 +16,7 @@ import (
 
 var (
 	flagPort = flag.String("http", ":8080", "webserver port")
+	flagFPS  = flag.Int("fps", 5, "maximum frames per second")
 )
 var stream <-chan image.Image
 
@@ -28,6 +29,8 @@ var (
 )
 
 func main() {
+	flag.Parse()
+
 	in, err := openStream()
 	if err != nil {
 		exit(err)
@@ -47,11 +50,15 @@ func main() {
 }
 
 func printStats() {
-	fps := 0.
-	if (start != time.Time{}) {
-		fps = float64(nStreamed) / time.Since(start).Seconds()
+	if nStreamed == 0{
+		return
 	}
-	fmt.Printf("errors:%v dropped:%v processed:%v streamed:%v fps:%.1f\n", nErrors, nDropped, nProcessed, nStreamed, fps)
+	if (start == time.Time{}){
+		start = time.Now()
+		return
+	}
+	fps := float64(nStreamed) / time.Since(start).Seconds()
+		fmt.Printf("errors:%v dropped:%v processed:%v streamed:%v fps:%.1f\n", nErrors, nDropped, nProcessed, nStreamed, fps)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -73,7 +80,6 @@ func handleImg(w http.ResponseWriter, r *http.Request) error {
 }
 
 func handleStream(w http.ResponseWriter, r *http.Request) error {
-	start = time.Now()
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
 	for {
 		img := <-stream
@@ -134,10 +140,10 @@ func decodeStream(in io.Reader) <-chan image.Image {
 
 func openStream() (io.Reader, error) {
 	bin := "gst-launch-1.0"
-	args := strings.Split(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=3/1 ! jpegenc ! filesink buffer-size=1 location=/dev/stdout`, " ")
+	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! jpegenc ! filesink buffer-size=0 location=/dev/stdout`, *flagFPS)
 
 	fmt.Println(bin, args)
-	cmd := exec.Command(bin, args...)
+	cmd := exec.Command(bin, strings.Split(args, " ")...)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
