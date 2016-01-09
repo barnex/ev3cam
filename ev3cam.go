@@ -67,7 +67,7 @@ func main() {
 }
 
 // sinkhole sucks the image stream so we can test intrinsic performance
-func sinkhole(){
+func sinkhole() {
 	go func() {
 		for {
 			<-stream
@@ -116,7 +116,7 @@ func handleStatic(w http.ResponseWriter, r *http.Request) error {
 }
 
 func handleStream(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=--BOUNDARY")
 	for {
 		img := <-stream
 		_, err := fmt.Fprint(w, "--BOUNDARY\r\n"+
