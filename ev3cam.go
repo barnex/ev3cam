@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	flagFPS     = flag.Int("fps", 10, "maximum frames per second")
+	flagDev   = flag.String("dev", "/dev/video0", "video device")
+	flagFPS     = flag.Int("fps", 15, "maximum frames per second")
 	flagHeight  = flag.Int("h", 240, "image height in pixels")
 	flagPort    = flag.String("http", ":8080", "webserver port")
 	flagQuality = flag.Int("quality", 25, "jpeg qualtity")
@@ -186,7 +187,7 @@ func (r *reader) Read(p []byte) (n int, err error) {
 
 func openStream() (io.Reader, error) {
 	bin := "gst-launch-1.0"
-	args := fmt.Sprintf(`v4l2src device=/dev/video0 ! videorate ! video/x-raw,framerate=%d/1 ! videoscale ! video/x-raw,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
+	args := fmt.Sprintf(`v4l2src device=%s ! videorate ! video/x-raw,framerate=%d/1 ! videoscale ! video/x-raw,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagDev, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
 
 	fmt.Println(bin, args)
 	cmd := exec.Command(bin, strings.Split(args, " ")...)
