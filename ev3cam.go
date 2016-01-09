@@ -22,10 +22,11 @@ var stream <-chan image.Image
 
 var (
 	start      time.Time
+	nBytes     int64
 	nDropped   int
 	nProcessed int
 	nStreamed  int
-	errors = make(map[string]int)
+	nErrors     int
 )
 
 func main() {
@@ -50,15 +51,19 @@ func main() {
 }
 
 func printStats() {
-	if nStreamed == 0{
-		return
-	}
-	if (start == time.Time{}){
+	if (start == time.Time{}) {
 		start = time.Now()
 		return
 	}
-	fps := float64(nStreamed) / time.Since(start).Seconds()
-		fmt.Printf("dropped:%v processed:%v streamed:%v fps:%.1f errors:%v\n", nDropped, nProcessed, nStreamed, fps, errors)
+	if nStreamed == 0 {
+		nErrors = 0 // HACK
+		return
+	}
+	s := time.Since(start).Seconds()
+	fps := float64(nStreamed) / s
+	kBps := (float64(nBytes) / 1000) / s
+	eps := (float64(nErrors))/s
+	fmt.Printf("%.1fkB/s, dropped:%v processed:%v streamed:%v fps:%.1f errors/s:%.1f\n", kBps, nDropped, nProcessed, nStreamed, fps, eps)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -90,7 +95,7 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 
 		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
 		if err != nil {
-			errors[err.Error()]++
+			nErrors++
 		}
 		nStreamed++
 	}
@@ -111,11 +116,11 @@ func exit(x ...interface{}) {
 	os.Exit(1)
 }
 
-func decodeStream(in io.Reader) <-chan image.Image {
+func decodeStream(input io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
 	go func() {
-		//in := bufio.NewReader(input)
+		in := newReader(input)
 		for {
 			printStats()
 			img, err := jpeg.Decode(in)
@@ -123,7 +128,7 @@ func decodeStream(in io.Reader) <-chan image.Image {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
 				}
-				errors[err.Error()]++
+				nErrors++
 				continue
 			}
 			select {
@@ -135,6 +140,20 @@ func decodeStream(in io.Reader) <-chan image.Image {
 		}
 	}()
 	return ch
+}
+
+type reader struct {
+	in io.Reader
+}
+
+func newReader(in io.Reader) *reader {
+	return &reader{in: in}
+}
+
+func (r *reader) Read(p []byte) (n int, err error) {
+	n, err = r.in.Read(p)
+	nBytes += int64(n)
+	return
 }
 
 func openStream() (io.Reader, error) {
