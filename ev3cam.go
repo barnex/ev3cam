@@ -19,9 +19,10 @@ var (
 )
 
 var (
-	stream   <-chan image.Image
-	nDropped int
-	nPiped   int
+	stream    <-chan image.Image
+	nDropped  int
+	nPiped    int
+	nStreamed int
 )
 
 func main() {
@@ -30,7 +31,9 @@ func main() {
 		exit(err)
 	}
 
+	http.Handle("/", appHandler(handleStatic))
 	http.Handle("/img", appHandler(handleImg))
+	http.Handle("/cam", appHandler(handleStream))
 	stream = decodeStream(in)
 
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
@@ -38,9 +41,40 @@ func main() {
 	}
 }
 
+func handleStatic(w http.ResponseWriter, r *http.Request) error {
+	fmt.Fprintln(w, `
+		<html>
+		<head>
+		</head>
+		<body>
+		<img src="/cam"></img>
+		</body>
+		</html>
+	`)
+	return nil
+}
+
 func handleImg(w http.ResponseWriter, r *http.Request) error {
 	img := <-stream
-	return jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
+	return jpeg.Encode(w, img, &jpeg.Options{Quality: 50})
+}
+
+func handleStream(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
+	for {
+		img := <-stream
+		fmt.Fprint(w, "--BOUNDARY\r\n"+
+			"Content-Type:image/jpeg\r\n"+
+			//"Content-Length:" + length + "\r\n" +
+			"\r\n")
+
+		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
+		if err != nil {
+			fmt.Println(err)
+		}
+		nStreamed++
+		fmt.Println("streamed", nStreamed, "frames")
+	}
 }
 
 type appHandler func(w http.ResponseWriter, r *http.Request) error
@@ -72,11 +106,13 @@ func decodeStream(input io.Reader) <-chan image.Image {
 				fmt.Println(err)
 				continue
 			}
+			fmt.Println(img.Bounds)
 			select {
 			default:
 				nDropped++
 				fmt.Println("dropped", nDropped, "frames")
 			case ch <- img:
+				nPiped++
 				fmt.Println("piped", nPiped, "frames")
 			}
 		}
