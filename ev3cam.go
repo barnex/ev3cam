@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"image"
@@ -133,7 +132,8 @@ func decodeStream(input io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
 	go func() {
-		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
+		//in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
+		in := newReader(input)
 		for {
 			printStats()
 			img, err := jpeg.Decode(in)
