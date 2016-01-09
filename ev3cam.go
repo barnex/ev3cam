@@ -17,12 +17,13 @@ import (
 )
 
 var (
-	flagDev   = flag.String("dev", "/dev/video0", "video device")
+	flagDev     = flag.String("dev", "/dev/video0", "video device")
 	flagFPS     = flag.Int("fps", 15, "maximum frames per second")
 	flagHeight  = flag.Int("h", 240, "image height in pixels")
 	flagPort    = flag.String("http", ":8080", "webserver port")
 	flagQuality = flag.Int("quality", 25, "jpeg qualtity")
 	flagWidth   = flag.Int("w", 320, "image width in pixels")
+	flagV       = flag.Bool("v", true, "verbose output")
 )
 
 var (
@@ -30,8 +31,10 @@ var (
 	fifo   = "fifo"
 )
 
+// for performance statistics
 var (
 	start      time.Time
+	count      int // don't print every time
 	nBytes     int64
 	nDropped   int
 	nProcessed int
@@ -57,24 +60,28 @@ func main() {
 
 	exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
-	// sinkhole tests intrinsic performance
-	//go func() {
-	//	for {
-	//		<-stream
-	//	}
-	//}()
-
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
 		exit(err)
 	}
 
 }
 
-var count = 0
+// sinkhole sucks the image stream so we can test intrinsic performance
+func sinkhole(){
+	go func() {
+		for {
+			<-stream
+		}
+	}()
+
+}
 
 func printStats() {
+	if !*flagV {
+		return
+	}
 	count++
-	if count%8 != 0 {
+	if count%16 != 0 {
 		return
 	}
 	now := time.Now()
@@ -92,7 +99,7 @@ func printStats() {
 	pps := (float64(nProcessed)) / s
 	nProcessed = 0
 
-	fmt.Printf("%.1fkB/s, dropped:%.1f/s processed:%.1f/s fps:%.1f errors/s:%.1f\n", kBps, dps, pps, fps, eps)
+	fmt.Printf("%.1fkB/s, dropped:%.1f/s processed:%.1f/s browser:%.1f errors/s:%.1f\n", kBps, dps, pps, fps, eps)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -112,14 +119,19 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
 	for {
 		img := <-stream
-		fmt.Fprint(w, "--BOUNDARY\r\n"+
+		_, err := fmt.Fprint(w, "--BOUNDARY\r\n"+
 			"Content-Type: image/jpeg\r\n"+
 			//"Content-Length:" + length + "\r\n" +
 			"\r\n")
-
-		err := jpeg.Encode(w, img, &jpeg.Options{Quality: *flagQuality})
 		if err != nil {
 			nErrors++
+			return err
+		}
+
+		err = jpeg.Encode(w, img, &jpeg.Options{Quality: *flagQuality})
+		if err != nil {
+			nErrors++
+			return err
 		}
 		nStreamed++
 	}
@@ -180,7 +192,6 @@ func newReader(in io.Reader) *reader {
 
 func (r *reader) Read(p []byte) (n int, err error) {
 	n, err = r.in.Read(p)
-	//fmt.Println("read", len(p), "returns", n)
 	nBytes += int64(n)
 	return
 }
