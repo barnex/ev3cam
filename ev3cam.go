@@ -51,26 +51,22 @@ type timer struct {
 }
 
 func (t *timer) Start() {
-	if (t.started != time.Time{}) {
-		panic("start: timer already started")
-	}
 	t.started = time.Now()
 }
 
 func (t *timer) Stop() {
 	t.n++
-	if (t.started == time.Time{}) {
-		panic("stop: timer was not started")
-	}
 	t.total += time.Since(t.started)
 	t.started = time.Time{}
 }
 
 func (t *timer) String() string {
-	return fmt.Sprintf("%v total, %v per call", t.total, time.Duration(int64(t.total)/t.n))
+	return time.Duration(int64(t.total) / t.n).String()
 }
 
-func main() {
+func main(){Main()}
+
+func Main() {
 	flag.Parse()
 
 	fifo += path.Base(*flagDev)
@@ -87,7 +83,7 @@ func main() {
 	http.Handle("/cam", appHandler(handleStream))
 	stream = decodeStream(in)
 
-	exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
+	//exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
 	if err := http.ListenAndServe(*flagPort, nil); err != nil {
 		exit(err)
