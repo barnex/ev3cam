@@ -41,7 +41,34 @@ var (
 	nProcessed int
 	nStreamed  int
 	nErrors    int
+	tEnc, tDec timer
 )
+
+type timer struct {
+	n       int64
+	total   time.Duration
+	started time.Time
+}
+
+func (t *timer) Start() {
+	if (t.started != time.Time{}) {
+		panic("start: timer already started")
+	}
+	t.started = time.Now()
+}
+
+func (t *timer) Stop() {
+	t.n++
+	if (t.started == time.Time{}) {
+		panic("stop: timer was not started")
+	}
+	t.total += time.Since(t.started)
+	t.started = time.Time{}
+}
+
+func (t *timer) String() string {
+	return fmt.Sprintf("%v total, %v per call", t.total, time.Duration(int64(t.total)/t.n))
+}
 
 func main() {
 	flag.Parse()
@@ -101,7 +128,8 @@ func printStats() {
 	pps := (float64(nProcessed)) / s
 	nProcessed = 0
 
-	fmt.Printf("%.1fkB/s, dropped:%.1f/s processed:%.1f/s browser:%.1f errors/s:%.1f\n", kBps, dps, pps, fps, eps)
+	fmt.Printf("%.1fkB/s, decode:%.1f/s drop:%.1f/s render:%.1f errors/s:%.1f\n", kBps, pps, dps, fps, eps)
+	fmt.Println("decode", &tDec, "encode", &tEnc)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -130,7 +158,9 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
+		tEnc.Start()
 		err = jpeg.Encode(w, img, &jpeg.Options{Quality: *flagQuality})
+		tEnc.Stop()
 		if err != nil {
 			nErrors++
 			return err
@@ -162,7 +192,9 @@ func decodeStream(input io.Reader) <-chan image.Image {
 		//in := newReader(input)
 		for {
 			printStats()
+			tDec.Start()
 			img, err := jpeg.Decode(in)
+			tDec.Stop()
 			if err != nil {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
