@@ -16,16 +16,16 @@ import (
 
 var (
 	flagPort = flag.String("http", ":8080", "webserver port")
-	flagFPS  = flag.Int("fps", 5, "maximum frames per second")
+	flagFPS  = flag.Int("fps", 10, "maximum frames per second")
 )
 var stream <-chan image.Image
 
 var (
 	start      time.Time
-	nErrors    int
 	nDropped   int
 	nProcessed int
 	nStreamed  int
+	errors = make(map[string]int)
 )
 
 func main() {
@@ -58,7 +58,7 @@ func printStats() {
 		return
 	}
 	fps := float64(nStreamed) / time.Since(start).Seconds()
-		fmt.Printf("errors:%v dropped:%v processed:%v streamed:%v fps:%.1f\n", nErrors, nDropped, nProcessed, nStreamed, fps)
+		fmt.Printf("dropped:%v processed:%v streamed:%v fps:%.1f errors:%v\n", nDropped, nProcessed, nStreamed, fps, errors)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -90,7 +90,7 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 
 		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
 		if err != nil {
-			fmt.Println(err)
+			errors[err.Error()]++
 		}
 		nStreamed++
 	}
@@ -123,8 +123,7 @@ func decodeStream(in io.Reader) <-chan image.Image {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
 				}
-				nErrors++
-				//fmt.Println(err)
+				errors[err.Error()]++
 				continue
 			}
 			select {
