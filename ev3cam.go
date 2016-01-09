@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"image"
@@ -47,7 +48,6 @@ func main() {
 	}
 
 	http.Handle("/", appHandler(handleStatic))
-	http.Handle("/img", appHandler(handleImg))
 	http.Handle("/cam", appHandler(handleStream))
 	stream = decodeStream(in)
 
@@ -59,20 +59,29 @@ func main() {
 
 }
 
+var count = 0
+
 func printStats() {
-	if (start == time.Time{}) {
-		start = time.Now()
+	count++
+	if count%8 != 0 {
 		return
 	}
-	if nStreamed == 0 {
-		nErrors = 0 // HACK
-		return
-	}
-	s := time.Since(start).Seconds()
+	now := time.Now()
+	s := now.Sub(start).Seconds()
+	start = now
+
 	fps := float64(nStreamed) / s
+	nStreamed = 0
 	kBps := (float64(nBytes) / 1000) / s
+	nBytes = 0
 	eps := (float64(nErrors)) / s
-	fmt.Printf("%.1fkB/s, dropped:%v processed:%v streamed:%v fps:%.1f errors/s:%.1f\n", kBps, nDropped, nProcessed, nStreamed, fps, eps)
+	nErrors = 0
+	dps := (float64(nDropped)) / s
+	nDropped = 0
+	pps := (float64(nProcessed)) / s
+	nProcessed = 0
+
+	fmt.Printf("%.1fkB/s, dropped:%.1f/s processed:%.1f/s fps:%.1f errors/s:%.1f\n", kBps, dps, pps, fps, eps)
 }
 
 func handleStatic(w http.ResponseWriter, r *http.Request) error {
@@ -88,11 +97,6 @@ func handleStatic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func handleImg(w http.ResponseWriter, r *http.Request) error {
-	img := <-stream
-	return jpeg.Encode(w, img, &jpeg.Options{Quality: 50})
-}
-
 func handleStream(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=BOUNDARY")
 	for {
@@ -102,7 +106,7 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 			//"Content-Length:" + length + "\r\n" +
 			"\r\n")
 
-		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
+		err := jpeg.Encode(w, img, &jpeg.Options{Quality: 25})
 		if err != nil {
 			nErrors++
 		}
@@ -129,7 +133,7 @@ func decodeStream(input io.Reader) <-chan image.Image {
 	ch := make(chan image.Image)
 
 	go func() {
-		in := newReader(input)
+		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
 		for {
 			printStats()
 			img, err := jpeg.Decode(in)
@@ -137,7 +141,9 @@ func decodeStream(input io.Reader) <-chan image.Image {
 				if err.Error() == "unexpected EOF" {
 					close(ch)
 				}
-				fmt.Println(err)
+				if err.Error() != "invalid JPEG format: missing SOI marker" {
+					exit(err)
+				}
 				nErrors++
 				continue
 			}
@@ -162,6 +168,7 @@ func newReader(in io.Reader) *reader {
 
 func (r *reader) Read(p []byte) (n int, err error) {
 	n, err = r.in.Read(p)
+	//fmt.Println("read", len(p), "returns", n)
 	nBytes += int64(n)
 	return
 }
