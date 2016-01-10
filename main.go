@@ -6,8 +6,6 @@ import (
 	"image"
 	_ "net/http/pprof"
 	"os"
-	"path"
-	"syscall"
 )
 
 var (
@@ -29,17 +27,11 @@ var (
 func main() {
 	flag.Parse()
 
-	fifo += path.Base(*flagDev)
-	if err := syscall.Mkfifo(fifo, 0666); err != nil {
-		fmt.Fprintln(os.Stderr, "mkfifo", fifo, ":", err)
-	}
-
-	in, err := openStream()
+	pipe, err := openGStreamer()
 	if err != nil {
 		exit(err)
 	}
-
-	input = decodeStream(in)
+	input = decodeMJPEG(pipe)
 	output = runProcessing(input)
 
 	//exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
