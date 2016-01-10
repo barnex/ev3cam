@@ -40,8 +40,9 @@ func main() {
 }
 
 var (
-	bg     [3]Floats
-	filter = 0.75
+	bg        [3]Floats
+	filter    = 0.75
+	threshold = 0.15
 )
 
 func process(in [3]Floats) Floats {
@@ -56,12 +57,44 @@ func process(in [3]Floats) Floats {
 	BG := data(bg)
 
 	for i := range OUT {
-		OUT[i] = 2 * sqrt(sq(IN[0][i]-BG[0][i])+sq(IN[1][i]-BG[1][i])+sq(IN[2][i]-BG[2][i])) / sqrt(3)
+		diff := sqrt(sq(IN[0][i]-BG[0][i])+sq(IN[1][i]-BG[1][i])+sq(IN[2][i]-BG[2][i])) / sqrt(3)
+		if diff > threshold {
+			OUT[i] = 1
+		}
+		//OUT[i] = diff
 	}
 
 	for c := range bg {
 		for i := range BG[c] {
 			BG[c][i] = (1-filter)*BG[c][i] + filter*IN[c][i]
+		}
+	}
+
+	var sX, sY, n float64
+	for y := range out {
+		for x := range out[y] {
+			if out[y][x] == 1 {
+				sX += float64(x)
+				sY += float64(y)
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		n = 1
+	}
+	targetX := int(sX / n)
+	targetY := int(sY / n)
+
+	w, h := out.Size()
+	if targetX < 0 || targetX >= w || targetY < 0 || targetY >= h {
+		fmt.Println("invalid target", targetX, targetY)
+	} else {
+		for x := 0; x < w; x++ {
+			out[targetY][x] = 0.5
+		}
+		for y := 0; y < h; y++ {
+			out[y][targetX] = 0.5
 		}
 	}
 
