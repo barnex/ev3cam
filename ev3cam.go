@@ -8,8 +8,6 @@ import (
 	"image/color"
 	"image/jpeg"
 	"io"
-	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/exec"
@@ -24,7 +22,7 @@ var (
 	flagFPS     = flag.Int("fps", 15, "maximum frames per second")
 	flagHeight  = flag.Int("h", 240, "image height in pixels")
 	flagPort    = flag.String("http", ":8080", "webserver port")
-	flagQuality = flag.Int("quality", 25, "jpeg qualtity")
+	flagQuality = flag.Int("quality", 50, "jpeg qualtity")
 	flagWidth   = flag.Int("w", 320, "image width in pixels")
 	flagV       = flag.Bool("v", true, "verbose output")
 )
@@ -47,7 +45,6 @@ var (
 	tEnc, tDec timer
 )
 
-
 func main() { Main() }
 
 func Main() {
@@ -63,20 +60,15 @@ func Main() {
 		exit(err)
 	}
 
-	http.Handle("/", appHandler(handleStatic))
-	http.Handle("/cam", mjpegHandler(stream))
-	http.Handle("/processed", mjpegHandler(render))
-
 	decodeStream(in)
 
 	go runProcessing()
 
 	//exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
-	if err := http.ListenAndServe(*flagPort, nil); err != nil {
+	if err := serveHTTP(); err != nil {
 		exit(err)
 	}
-
 }
 
 func runProcessing() {
@@ -181,61 +173,6 @@ func printStats() {
 	fmt.Println("decode", &tDec, "encode", &tEnc)
 }
 
-func handleStatic(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, `
-		<html>
-		<head>
-		</head>
-		<body>
-		<img src="/cam"></img>
-		</body>
-		</html>
-	`)
-	return nil
-}
-
-
-type mjpegHandler chan image.Image
-
-func(h mjpegHandler)ServeHTTP(w http.ResponseWriter, r*http.Request){
-	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=--BOUNDARY")
-	for {
-		img := <-h
-		_, err := fmt.Fprint(w, "--BOUNDARY\r\n"+
-			"Content-Type: image/jpeg\r\n"+
-			//"Content-Length:" + length + "\r\n" +
-			"\r\n")
-		if err != nil {
-			nErrors++
-			http.Error(w, err.Error(), 500)
-			return
-		}
-
-		tEnc.Start()
-		err = jpeg.Encode(w, img, &jpeg.Options{Quality: *flagQuality})
-		tEnc.Stop()
-		if err != nil {
-			nErrors++
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		nStreamed++
-	}
-}
-
-
-
-
-type appHandler func(w http.ResponseWriter, r *http.Request) error
-
-func (h appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := h(w, r)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), 500)
-	}
-}
-
 func exit(x ...interface{}) {
 	fmt.Fprintln(os.Stderr, x...)
 	os.Exit(1)
@@ -313,7 +250,6 @@ func openStream() (io.Reader, error) {
 	}
 	return f, nil
 }
-
 
 type timer struct {
 	n       int64
