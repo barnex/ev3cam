@@ -1,19 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"image"
-	"image/jpeg"
-	"io"
 	_ "net/http/pprof"
 	"os"
-	"os/exec"
 	"path"
-	"strings"
 	"syscall"
-	"time"
 )
 
 var (
@@ -78,106 +72,9 @@ func sinkhole() {
 			<-stream
 		}
 	}()
-
 }
 
 func exit(x ...interface{}) {
 	fmt.Fprintln(os.Stderr, x...)
 	os.Exit(1)
-}
-
-func decodeStream(input io.Reader) {
-	go func() {
-		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
-		//in := newReader(input)
-		for {
-			printStats()
-			tDec.Start()
-			img, err := jpeg.Decode(in)
-			tDec.Stop()
-			if err != nil {
-				if err.Error() == "unexpected EOF" {
-					close(stream)
-				}
-				if err.Error() != "invalid JPEG format: missing SOI marker" {
-					exit(err)
-				}
-				nErrors++
-				continue
-			}
-			select {
-			default:
-				nDropped++
-			case stream <- img:
-				nProcessed++
-			}
-		}
-	}()
-}
-
-type reader struct {
-	in io.Reader
-}
-
-func newReader(in io.Reader) *reader {
-	return &reader{in: in}
-}
-
-func (r *reader) Read(p []byte) (n int, err error) {
-	n, err = r.in.Read(p)
-	nBytes += int64(n)
-	return
-}
-
-func openStream() (io.Reader, error) {
-	bin := "gst-launch-1.0"
-	args := fmt.Sprintf(`v4l2src device=%s ! video/x-raw,framerate=%d/1,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagDev, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
-
-	fmt.Println(bin, args)
-	cmd := exec.Command(bin, strings.Split(args, " ")...)
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-	go io.Copy(os.Stderr, stderr)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	go io.Copy(os.Stderr, stdout)
-
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(fifo)
-	if err != nil {
-		return nil, err
-	}
-	return f, nil
-}
-
-type timer struct {
-	n       int64
-	total   time.Duration
-	started time.Time
-}
-
-func (t *timer) Start() {
-	t.started = time.Now()
-}
-
-func (t *timer) Stop() {
-	t.n++
-	t.total += time.Since(t.started)
-	t.started = time.Time{}
-}
-
-func (t *timer) String() string {
-	if t.n == 0 {
-		return "0"
-	}
-	return time.Duration(int64(t.total) / t.n).String()
 }

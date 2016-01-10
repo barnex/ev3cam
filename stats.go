@@ -43,3 +43,26 @@ func printStats() {
 	fmt.Printf("%.1fkB/s, decode:%.1f/s drop:%.1f/s render:%.1f errors/s:%.1f\n", kBps, pps, dps, fps, eps)
 	fmt.Println("decode", &tDec, "encode", &tEnc)
 }
+
+type timer struct {
+	n       int64
+	total   time.Duration
+	started time.Time
+}
+
+func (t *timer) Start() {
+	t.started = time.Now()
+}
+
+func (t *timer) Stop() {
+	t.n++
+	t.total += time.Since(t.started)
+	t.started = time.Time{}
+}
+
+func (t *timer) String() string {
+	if t.n == 0 {
+		return "0"
+	}
+	return time.Duration(int64(t.total) / t.n).String()
+}

@@ -1,0 +1,84 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"image/jpeg"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+func decodeStream(input io.Reader) {
+	go func() {
+		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
+		//in := newReader(input)
+		for {
+			printStats()
+			tDec.Start()
+			img, err := jpeg.Decode(in)
+			tDec.Stop()
+			if err != nil {
+				if err.Error() == "unexpected EOF" {
+					close(stream)
+				}
+				if err.Error() != "invalid JPEG format: missing SOI marker" {
+					exit(err)
+				}
+				nErrors++
+				continue
+			}
+			select {
+			default:
+				nDropped++
+			case stream <- img:
+				nProcessed++
+			}
+		}
+	}()
+}
+
+type reader struct {
+	in io.Reader
+}
+
+func newReader(in io.Reader) *reader {
+	return &reader{in: in}
+}
+
+func (r *reader) Read(p []byte) (n int, err error) {
+	n, err = r.in.Read(p)
+	nBytes += int64(n)
+	return
+}
+
+func openStream() (io.Reader, error) {
+	bin := "gst-launch-1.0"
+	args := fmt.Sprintf(`v4l2src device=%s ! video/x-raw,framerate=%d/1,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagDev, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
+
+	fmt.Println(bin, args)
+	cmd := exec.Command(bin, strings.Split(args, " ")...)
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(os.Stderr, stderr)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(os.Stderr, stdout)
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(fifo)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
