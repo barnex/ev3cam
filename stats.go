@@ -7,14 +7,14 @@ import (
 
 // for performance statistics
 var (
-	start      time.Time
-	count      int // don't print every time
-	nBytes     int64
-	nDropped   int
-	nProcessed int
-	nStreamed  int
-	nErrors    int
-	tEnc, tDec timer
+	start             time.Time
+	count             int // don't print every time
+	nBytes            int64
+	nDropped          int
+	nProcessed        int
+	nStreamed         int
+	nErrors           int
+	tEnc, tDec, tProc timer
 )
 
 func printStats() {
@@ -41,7 +41,7 @@ func printStats() {
 	nProcessed = 0
 
 	fmt.Printf("%.1fkB/s, decode:%.1f/s drop:%.1f/s render:%.1f errors/s:%.1f\n", kBps, pps, dps, fps, eps)
-	fmt.Println("decode", &tDec, "encode", &tEnc)
+	fmt.Println("decode", &tDec, "process", &tProc, "encode", &tEnc)
 }
 
 type timer struct {

@@ -12,10 +12,10 @@ import (
 var (
 	flagDev     = flag.String("dev", "/dev/video0", "video device")
 	flagFPS     = flag.Int("fps", 15, "maximum frames per second")
-	flagHeight  = flag.Int("h", 240, "image height in pixels")
+	flagHeight  = flag.Int("h", 480, "image height in pixels")
 	flagPort    = flag.String("http", ":8080", "webserver port")
 	flagQuality = flag.Int("quality", 50, "jpeg qualtity")
-	flagWidth   = flag.Int("w", 320, "image width in pixels")
+	flagWidth   = flag.Int("w", 640, "image width in pixels")
 	flagV       = flag.Bool("v", true, "verbose output")
 )
 
@@ -45,6 +45,7 @@ var (
 )
 
 func process(in [3]Floats) Floats {
+	tProc.Start()
 	if bg[0] == nil {
 		bg = in
 	}
@@ -55,9 +56,7 @@ func process(in [3]Floats) Floats {
 	BG := data(bg)
 
 	for i := range OUT {
-		OUT[i] = math.Sqrt(sq(IN[0][i]-BG[0][i])+
-			sq(IN[1][i]-BG[1][i])+
-			sq(IN[2][i]-BG[2][i])) / math.Sqrt(3)
+		OUT[i] = 2 * sqrt(sq(IN[0][i]-BG[0][i])+sq(IN[1][i]-BG[1][i])+sq(IN[2][i]-BG[2][i])) / sqrt(3)
 	}
 
 	for c := range bg {
@@ -66,14 +65,8 @@ func process(in [3]Floats) Floats {
 		}
 	}
 
+	tProc.Stop()
 	return out
-}
-
-func sq(x float64) float64 {
-	return x * x
-}
-func data(x [3]Floats) [3][]float64 {
-	return [3][]float64{x[0].Data(), x[1].Data(), x[2].Data()}
 }
 
 func runProcessing(input chan image.Image) chan image.Image {
@@ -88,7 +81,34 @@ func runProcessing(input chan image.Image) chan image.Image {
 	return output
 }
 
+func toVector(im image.Image) [3]Floats {
+	img := im.(*image.YCbCr)
+	w := img.Bounds().Max.X
+	h := img.Bounds().Max.Y
+	f := makeVectors(w, h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.YCbCrAt(x, y).RGBA()
+			f[0][y][x] = sqrt(float64(r) / 0xffff)
+			f[1][y][x] = sqrt(float64(g) / 0xffff)
+			f[2][y][x] = sqrt(float64(b) / 0xffff)
+		}
+	}
+	return f
+}
+
 func exit(x ...interface{}) {
 	fmt.Fprintln(os.Stderr, x...)
 	os.Exit(1)
+}
+
+func sq(x float64) float64 {
+	return x * x
+}
+
+func sqrt(x float64) float64 {
+	return math.Sqrt(x)
+}
+func data(x [3]Floats) [3][]float64 {
+	return [3][]float64{x[0].Data(), x[1].Data(), x[2].Data()}
 }

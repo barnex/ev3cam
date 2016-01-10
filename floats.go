@@ -8,7 +8,14 @@ import (
 type Floats [][]float64
 
 func (f Floats) At(x, y int) color.Color {
-	return color.Gray16{uint16(f[y][x] * 0xffff)}
+	return color.Gray16{uint16(clamp(sq(f[y][x])) * 0xffff)}
+}
+
+func clamp(x float64) float64 {
+	if x > 1 {
+		return 1
+	}
+	return x
 }
 
 func (f Floats) ColorModel() color.Model {
@@ -42,23 +49,6 @@ func makeFloats(w, h int) Floats {
 		s[y] = storage[y*w : (y+1)*w]
 	}
 	return s
-}
-
-// TODO: srgb?
-func toVector(im image.Image) [3]Floats {
-	img := im.(*image.YCbCr)
-	w := img.Bounds().Max.X
-	h := img.Bounds().Max.Y
-	f := makeVectors(w, h)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			r, g, b, _ := img.YCbCrAt(x, y).RGBA()
-			f[0][y][x] = float64(r) / 0xffff
-			f[1][y][x] = float64(g) / 0xffff
-			f[2][y][x] = float64(b) / 0xffff
-		}
-	}
-	return f
 }
 
 func makeVectors(w, h int) [3]Floats {
