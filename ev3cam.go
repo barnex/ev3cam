@@ -5,17 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 	"syscall"
 	"time"
-	_ "net/http/pprof"
 )
 
 var (
@@ -29,7 +30,8 @@ var (
 )
 
 var (
-	stream <-chan image.Image
+	stream = make(chan image.Image)
+	render = make(chan image.Image)
 	fifo   = "fifo"
 )
 
@@ -45,28 +47,6 @@ var (
 	tEnc, tDec timer
 )
 
-type timer struct {
-	n       int64
-	total   time.Duration
-	started time.Time
-}
-
-func (t *timer) Start() {
-	t.started = time.Now()
-}
-
-func (t *timer) Stop() {
-	t.n++
-	t.total += time.Since(t.started)
-	t.started = time.Time{}
-}
-
-func (t *timer) String() string {
-	if t.n == 0 {
-		return "0"
-	}
-	return time.Duration(int64(t.total) / t.n).String()
-}
 
 func main() { Main() }
 
@@ -84,8 +64,12 @@ func Main() {
 	}
 
 	http.Handle("/", appHandler(handleStatic))
-	http.Handle("/cam", appHandler(handleStream))
-	stream = decodeStream(in)
+	http.Handle("/cam", mjpegHandler(stream))
+	http.Handle("/processed", mjpegHandler(render))
+
+	decodeStream(in)
+
+	go runProcessing()
 
 	//exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
@@ -93,6 +77,71 @@ func Main() {
 		exit(err)
 	}
 
+}
+
+func runProcessing() {
+	for {
+		img := <-stream
+		//fmt.Printf("%T %v", img, img.Bounds())
+
+		f := toVector(img)[1]
+
+		select {
+		default:
+			nDropped++
+		case render <- Floats(f):
+		}
+	}
+}
+
+type Floats [][]float64
+
+func (f Floats) At(x, y int) color.Color {
+	return color.Gray16{uint16(f[y][x] * 0xffff)}
+}
+
+func (f Floats) ColorModel() color.Model {
+	return color.Gray16Model //??
+}
+
+func (f Floats) Bounds() image.Rectangle {
+	h := len(f)
+	w := len(f[0])
+	return image.Rect(0, 0, w, h)
+}
+
+// TODO: srgb?
+func toVector(im image.Image) [3][][]float64 {
+	img := im.(*image.YCbCr)
+	w := img.Bounds().Max.X
+	h := img.Bounds().Max.Y
+	f := makeVectors(w, h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.YCbCrAt(x, y).RGBA()
+			f[0][y][x] = float64(r) / 0xffff
+			f[1][y][x] = float64(g) / 0xffff
+			f[2][y][x] = float64(b) / 0xffff
+		}
+	}
+	return f
+}
+
+func makeScalars(w, h int) [][]float64 {
+	storage := make([]float64, w*h)
+	s := make([][]float64, h)
+	for y := range s {
+		s[y] = storage[y*w : (y+1)*w]
+	}
+	return s
+}
+
+func makeVectors(w, h int) [3][][]float64 {
+	var v [3][][]float64
+	for c := 0; c < 3; c++ {
+		v[c] = makeScalars(w, h)
+	}
+	return v
 }
 
 // sinkhole sucks the image stream so we can test intrinsic performance
@@ -145,17 +194,21 @@ func handleStatic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func handleStream(w http.ResponseWriter, r *http.Request) error {
+
+type mjpegHandler chan image.Image
+
+func(h mjpegHandler)ServeHTTP(w http.ResponseWriter, r*http.Request){
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace;boundary=--BOUNDARY")
 	for {
-		img := <-stream
+		img := <-h
 		_, err := fmt.Fprint(w, "--BOUNDARY\r\n"+
 			"Content-Type: image/jpeg\r\n"+
 			//"Content-Length:" + length + "\r\n" +
 			"\r\n")
 		if err != nil {
 			nErrors++
-			return err
+			http.Error(w, err.Error(), 500)
+			return
 		}
 
 		tEnc.Start()
@@ -163,11 +216,15 @@ func handleStream(w http.ResponseWriter, r *http.Request) error {
 		tEnc.Stop()
 		if err != nil {
 			nErrors++
-			return err
+			http.Error(w, err.Error(), 500)
+			return
 		}
 		nStreamed++
 	}
 }
+
+
+
 
 type appHandler func(w http.ResponseWriter, r *http.Request) error
 
@@ -184,9 +241,7 @@ func exit(x ...interface{}) {
 	os.Exit(1)
 }
 
-func decodeStream(input io.Reader) <-chan image.Image {
-	ch := make(chan image.Image)
-
+func decodeStream(input io.Reader) {
 	go func() {
 		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
 		//in := newReader(input)
@@ -197,7 +252,7 @@ func decodeStream(input io.Reader) <-chan image.Image {
 			tDec.Stop()
 			if err != nil {
 				if err.Error() == "unexpected EOF" {
-					close(ch)
+					close(stream)
 				}
 				if err.Error() != "invalid JPEG format: missing SOI marker" {
 					exit(err)
@@ -208,12 +263,11 @@ func decodeStream(input io.Reader) <-chan image.Image {
 			select {
 			default:
 				nDropped++
-			case ch <- img:
+			case stream <- img:
 				nProcessed++
 			}
 		}
 	}()
-	return ch
 }
 
 type reader struct {
@@ -258,4 +312,28 @@ func openStream() (io.Reader, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+
+type timer struct {
+	n       int64
+	total   time.Duration
+	started time.Time
+}
+
+func (t *timer) Start() {
+	t.started = time.Now()
+}
+
+func (t *timer) Stop() {
+	t.n++
+	t.total += time.Since(t.started)
+	t.started = time.Time{}
+}
+
+func (t *timer) String() string {
+	if t.n == 0 {
+		return "0"
+	}
+	return time.Duration(int64(t.total) / t.n).String()
 }
