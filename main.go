@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"math"
 	_ "net/http/pprof"
 	"os"
 )
@@ -38,13 +39,50 @@ func main() {
 	}
 }
 
+var (
+	bg     [3]Floats
+	filter = 0.75
+)
+
+func process(in [3]Floats) Floats {
+	if bg[0] == nil {
+		bg = in
+	}
+
+	out := makeFloats(in[0].Size())
+	OUT := out.Data()
+	IN := data(in)
+	BG := data(bg)
+
+	for i := range OUT {
+		OUT[i] = math.Sqrt(sq(IN[0][i]-BG[0][i])+
+			sq(IN[1][i]-BG[1][i])+
+			sq(IN[2][i]-BG[2][i])) / math.Sqrt(3)
+	}
+
+	for c := range bg {
+		for i := range BG[c] {
+			BG[c][i] = (1-filter)*BG[c][i] + filter*IN[c][i]
+		}
+	}
+
+	return out
+}
+
+func sq(x float64) float64 {
+	return x * x
+}
+func data(x [3]Floats) [3][]float64 {
+	return [3][]float64{x[0].Data(), x[1].Data(), x[2].Data()}
+}
+
 func runProcessing(input chan image.Image) chan image.Image {
 	output := make(chan image.Image)
 	go func() {
 		for {
 			img := <-input
-			f := toVector(img)[1]
-			output <- Floats(f)
+			x := process(toVector(img))
+			output <- Floats(x)
 		}
 	}()
 	return output

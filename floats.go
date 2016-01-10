@@ -15,14 +15,37 @@ func (f Floats) ColorModel() color.Model {
 	return color.Gray16Model //??
 }
 
+func (f Floats) Size() (w, h int) {
+	h = len(f)
+	w = len(f[0])
+	return
+}
+
+func (f Floats) Len() int {
+	w, h := f.Size()
+	return w * h
+}
+
 func (f Floats) Bounds() image.Rectangle {
-	h := len(f)
-	w := len(f[0])
+	w, h := f.Size()
 	return image.Rect(0, 0, w, h)
 }
 
+func (f Floats) Data() []float64 {
+	return f[0][:f.Len()]
+}
+
+func makeFloats(w, h int) Floats {
+	storage := make([]float64, w*h)
+	s := make([][]float64, h)
+	for y := range s {
+		s[y] = storage[y*w : (y+1)*w]
+	}
+	return s
+}
+
 // TODO: srgb?
-func toVector(im image.Image) [3][][]float64 {
+func toVector(im image.Image) [3]Floats {
 	img := im.(*image.YCbCr)
 	w := img.Bounds().Max.X
 	h := img.Bounds().Max.Y
@@ -38,19 +61,10 @@ func toVector(im image.Image) [3][][]float64 {
 	return f
 }
 
-func makeScalars(w, h int) [][]float64 {
-	storage := make([]float64, w*h)
-	s := make([][]float64, h)
-	for y := range s {
-		s[y] = storage[y*w : (y+1)*w]
-	}
-	return s
-}
-
-func makeVectors(w, h int) [3][][]float64 {
-	var v [3][][]float64
+func makeVectors(w, h int) [3]Floats {
+	var v [3]Floats
 	for c := 0; c < 3; c++ {
-		v[c] = makeScalars(w, h)
+		v[c] = makeFloats(w, h)
 	}
 	return v
 }
