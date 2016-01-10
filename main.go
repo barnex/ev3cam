@@ -21,8 +21,8 @@ var (
 )
 
 var (
-	stream chan image.Image
-	render = make(chan image.Image)
+	input  chan image.Image
+	output = make(chan image.Image)
 	fifo   = "fifo"
 )
 
@@ -39,9 +39,8 @@ func main() {
 		exit(err)
 	}
 
-	stream = decodeStream(in)
-
-	go runProcessing()
+	input = decodeStream(in)
+	output = runProcessing(input)
 
 	//exec.Command("google-chrome", "http://localhost"+*flagPort).Start()
 
@@ -50,28 +49,23 @@ func main() {
 	}
 }
 
-func runProcessing() {
-	for {
-		img := <-stream
-		//fmt.Printf("%T %v", img, img.Bounds())
-
-		f := toVector(img)[1]
-
-		select {
-		default:
-			nDropped++
-		case render <- Floats(f):
-		}
-	}
-}
-
-// sinkhole sucks the image stream so we can test intrinsic performance
-func sinkhole() {
+func runProcessing(input chan image.Image) chan image.Image {
+	output := make(chan image.Image)
 	go func() {
 		for {
-			<-stream
+			img := <-input
+			//fmt.Printf("%T %v", img, img.Bounds())
+
+			f := toVector(img)[1]
+
+			select {
+			default:
+				nDropped++
+			case output <- Floats(f):
+			}
 		}
 	}()
+	return output
 }
 
 func exit(x ...interface{}) {
