@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/jpeg"
 	"io"
 	_ "net/http/pprof"
@@ -33,21 +32,7 @@ var (
 	fifo   = "fifo"
 )
 
-// for performance statistics
-var (
-	start      time.Time
-	count      int // don't print every time
-	nBytes     int64
-	nDropped   int
-	nProcessed int
-	nStreamed  int
-	nErrors    int
-	tEnc, tDec timer
-)
-
-func main() { Main() }
-
-func Main() {
+func main() {
 	flag.Parse()
 
 	fifo += path.Base(*flagDev)
@@ -86,56 +71,6 @@ func runProcessing() {
 	}
 }
 
-type Floats [][]float64
-
-func (f Floats) At(x, y int) color.Color {
-	return color.Gray16{uint16(f[y][x] * 0xffff)}
-}
-
-func (f Floats) ColorModel() color.Model {
-	return color.Gray16Model //??
-}
-
-func (f Floats) Bounds() image.Rectangle {
-	h := len(f)
-	w := len(f[0])
-	return image.Rect(0, 0, w, h)
-}
-
-// TODO: srgb?
-func toVector(im image.Image) [3][][]float64 {
-	img := im.(*image.YCbCr)
-	w := img.Bounds().Max.X
-	h := img.Bounds().Max.Y
-	f := makeVectors(w, h)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			r, g, b, _ := img.YCbCrAt(x, y).RGBA()
-			f[0][y][x] = float64(r) / 0xffff
-			f[1][y][x] = float64(g) / 0xffff
-			f[2][y][x] = float64(b) / 0xffff
-		}
-	}
-	return f
-}
-
-func makeScalars(w, h int) [][]float64 {
-	storage := make([]float64, w*h)
-	s := make([][]float64, h)
-	for y := range s {
-		s[y] = storage[y*w : (y+1)*w]
-	}
-	return s
-}
-
-func makeVectors(w, h int) [3][][]float64 {
-	var v [3][][]float64
-	for c := 0; c < 3; c++ {
-		v[c] = makeScalars(w, h)
-	}
-	return v
-}
-
 // sinkhole sucks the image stream so we can test intrinsic performance
 func sinkhole() {
 	go func() {
@@ -144,33 +79,6 @@ func sinkhole() {
 		}
 	}()
 
-}
-
-func printStats() {
-	if !*flagV {
-		return
-	}
-	count++
-	if count%16 != 0 {
-		return
-	}
-	now := time.Now()
-	s := now.Sub(start).Seconds()
-	start = now
-
-	fps := float64(nStreamed) / s
-	nStreamed = 0
-	kBps := (float64(nBytes) / 1000) / s
-	nBytes = 0
-	eps := (float64(nErrors)) / s
-	nErrors = 0
-	dps := (float64(nDropped)) / s
-	nDropped = 0
-	pps := (float64(nProcessed)) / s
-	nProcessed = 0
-
-	fmt.Printf("%.1fkB/s, decode:%.1f/s drop:%.1f/s render:%.1f errors/s:%.1f\n", kBps, pps, dps, fps, eps)
-	fmt.Println("decode", &tDec, "encode", &tEnc)
 }
 
 func exit(x ...interface{}) {
