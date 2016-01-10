@@ -21,7 +21,7 @@ var (
 )
 
 var (
-	stream = make(chan image.Image)
+	stream chan image.Image
 	render = make(chan image.Image)
 	fifo   = "fifo"
 )
@@ -39,7 +39,7 @@ func main() {
 		exit(err)
 	}
 
-	decodeStream(in)
+	stream = decodeStream(in)
 
 	go runProcessing()
 

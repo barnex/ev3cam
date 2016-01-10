@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"io"
 	"os"
@@ -10,7 +11,8 @@ import (
 	"strings"
 )
 
-func decodeStream(input io.Reader) {
+func decodeStream(input io.Reader) chan image.Image {
+	stream := make(chan image.Image)
 	go func() {
 		in := newReader(bufio.NewReaderSize(input, 64*1024*1024))
 		//in := newReader(input)
@@ -37,6 +39,7 @@ func decodeStream(input io.Reader) {
 			}
 		}
 	}()
+	return stream
 }
 
 type reader struct {
