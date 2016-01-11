@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"os"
+	"time"
 )
 
 var rec chan image.Image
@@ -41,15 +44,47 @@ func streamRecorded(dir string) {
 		for {
 			f, err := os.Open(fmt.Sprintf("%v/%06d.jpg", *flagSrc, n))
 			if err != nil {
-				exit(err)
+				fmt.Println(err)
+				time.Sleep(time.Second)
+				n = 0
+				continue
 			}
 			img, err := jpeg.Decode(f)
 			if err != nil {
-				exit(err)
+				fmt.Println(err)
+				time.Sleep(time.Second)
+				n = 0
+				continue
 			}
 			f.Close()
 			input <- img
+			time.Sleep(80 * time.Millisecond)
 			n++
 		}
 	}()
+}
+
+func mark(src image.Image) image.Image {
+
+	b := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(dst, dst.Bounds(), src, b.Min, draw.Src)
+
+	w, h := b.Max.X, b.Max.Y
+	red := color.RGBA{255, 0, 0, 255}
+	targetX := int(targetX)
+	targetY := int(targetY)
+	if targetX < 0 || targetX >= w || targetY < 0 || targetY >= h {
+		fmt.Println("invalid target", targetX, targetY)
+	} else {
+		y := targetY
+		for x := 0; x < w; x++ {
+			dst.Set(x, y, red)
+		}
+		x := targetX
+		for y := 0; y < h; y++ {
+			dst.Set(x, y, red)
+		}
+	}
+	return dst
 }

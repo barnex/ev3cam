@@ -22,8 +22,10 @@ var (
 )
 
 var (
-	input  = make(chan image.Image)
-	output = make(chan image.Image)
+	input   = make(chan image.Image)
+	output  = make(chan image.Image)
+	targetX float64
+	targetY float64
 )
 
 func main() {
@@ -87,22 +89,9 @@ func process(in [3]Floats) Floats {
 			}
 		}
 	}
-	if n == 0 {
-		n = 1
-	}
-	targetX := int(sX / n)
-	targetY := int(sY / n)
-
-	w, h := out.Size()
-	if targetX < 0 || targetX >= w || targetY < 0 || targetY >= h {
-		fmt.Println("invalid target", targetX, targetY)
-	} else {
-		for x := 0; x < w; x++ {
-			out[targetY][x] = 0.5
-		}
-		for y := 0; y < h; y++ {
-			out[y][targetX] = 0.5
-		}
+	if n > 0 {
+		targetX = (sX / n)
+		targetY = (sY / n)
 	}
 
 	tProc.Stop()
@@ -114,8 +103,8 @@ func runProcessing(input chan image.Image) chan image.Image {
 	go func() {
 		for {
 			img := <-input
-			x := process(toVector(img))
-			output <- Floats(x)
+			_ = process(toVector(img))
+			output <- mark(img)
 		}
 	}()
 	return output
