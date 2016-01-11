@@ -38,7 +38,8 @@ func record(img image.Image) {
 	rec <- img
 }
 
-func streamRecorded(dir string) {
+func streamRecorded(dir string) chan image.Image {
+	input := make(chan image.Image)
 	go func() {
 		n := 0
 		for {
@@ -62,6 +63,7 @@ func streamRecorded(dir string) {
 			n++
 		}
 	}()
+	return input
 }
 
 func mark(src image.Image) image.Image {

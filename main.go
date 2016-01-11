@@ -22,7 +22,7 @@ var (
 )
 
 var (
-	input   = make(chan image.Image)
+	input   chan image.Image
 	output  = make(chan image.Image)
 	targetX float64
 	targetY float64
@@ -38,7 +38,7 @@ func main() {
 		}
 		input = decodeMJPEG(pipe)
 	} else {
-		streamRecorded(*flagSrc)
+		input = streamRecorded(*flagSrc)
 	}
 
 	output = runProcessing(input)
