@@ -23,7 +23,8 @@ var (
 
 var (
 	input   chan image.Image
-	output  = make(chan image.Image)
+	output1 = make(chan image.Image)
+	output2 = make(chan image.Image)
 	targetX float64
 	targetY float64
 )
@@ -41,7 +42,7 @@ func main() {
 		input = streamRecorded(*flagSrc)
 	}
 
-	output = runProcessing(input)
+	runProcessing(input)
 
 	if err := serveHTTP(); err != nil {
 		exit(err)
@@ -98,16 +99,21 @@ func process(in [3]Floats) Floats {
 	return out
 }
 
-func runProcessing(input chan image.Image) chan image.Image {
-	output := make(chan image.Image)
+func runProcessing(input chan image.Image) {
 	go func() {
 		for {
 			img := <-input
-			_ = process(toVector(img))
-			output <- mark(img)
+			x := process(toVector(img))
+			select {
+			default:
+			case output1 <- mark(img):
+			}
+			select {
+			default:
+			case output2 <- mark(x):
+			}
 		}
 	}()
-	return output
 }
 
 func toVector(im image.Image) [3]Floats {

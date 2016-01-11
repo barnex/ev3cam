@@ -11,7 +11,8 @@ import (
 func serveHTTP() error {
 	http.Handle("/", appHandler(handleStatic))
 	http.Handle("/input", mjpegHandler(input))
-	http.Handle("/output", mjpegHandler(output))
+	http.Handle("/output1", mjpegHandler(output1))
+	http.Handle("/output2", mjpegHandler(output2))
 	return http.ListenAndServe(*flagPort, nil)
 }
 
@@ -59,7 +60,8 @@ func handleStatic(w http.ResponseWriter, r *http.Request) error {
 		<head>
 		</head>
 		<body>
-		<img src="/output"></img>
+		<img src="/output1"></img>
+		<img src="/output2"></img>
 		</body>
 		</html>
 	`)
