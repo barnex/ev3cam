@@ -14,13 +14,13 @@ import (
 )
 
 func openGStreamer() (io.Reader, error) {
-	fifo := "fifo" + path.Base(*flagDev)
+	fifo := "fifo" + path.Base(*flagSrc)
 	if err := syscall.Mkfifo(fifo, 0666); err != nil {
 		fmt.Fprintln(os.Stderr, "mkfifo", fifo, ":", err)
 	}
 
 	bin := "gst-launch-1.0"
-	args := fmt.Sprintf(`v4l2src device=%s ! video/x-raw,framerate=%d/1,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagDev, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
+	args := fmt.Sprintf(`v4l2src device=%s ! video/x-raw,framerate=%d/1,width=%d,height=%d ! jpegenc quality=%d ! filesink buffer-size=0 location=%v`, *flagSrc, *flagFPS, *flagWidth, *flagHeight, *flagQuality, fifo)
 
 	fmt.Println(bin, args)
 	cmd := exec.Command(bin, strings.Split(args, " ")...)
@@ -58,6 +58,9 @@ func decodeMJPEG(input io.Reader) chan image.Image {
 			tDec.Start()
 			img, err := jpeg.Decode(in)
 			tDec.Stop()
+			if *flagRec != "" {
+				record(img)
+			}
 			if err != nil {
 				if err.Error() == "unexpected EOF" {
 					close(stream)

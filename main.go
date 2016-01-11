@@ -7,10 +7,12 @@ import (
 	"math"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 )
 
 var (
-	flagDev     = flag.String("dev", "/dev/video0", "video device")
+	flagSrc     = flag.String("src", "/dev/video0", "video device")
+	flagRec     = flag.String("rec", "", "directory to record input files")
 	flagFPS     = flag.Int("fps", 15, "maximum frames per second")
 	flagHeight  = flag.Int("h", 480, "image height in pixels")
 	flagPort    = flag.String("http", ":8080", "webserver port")
@@ -20,18 +22,23 @@ var (
 )
 
 var (
-	input  chan image.Image
+	input  = make(chan image.Image)
 	output = make(chan image.Image)
 )
 
 func main() {
 	flag.Parse()
 
-	pipe, err := openGStreamer()
-	if err != nil {
-		exit(err)
+	if strings.HasPrefix(*flagSrc, "/dev/") {
+		pipe, err := openGStreamer()
+		if err != nil {
+			exit(err)
+		}
+		input = decodeMJPEG(pipe)
+	} else {
+		streamRecorded(*flagSrc)
 	}
-	input = decodeMJPEG(pipe)
+
 	output = runProcessing(input)
 
 	if err := serveHTTP(); err != nil {
