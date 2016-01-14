@@ -58,9 +58,9 @@ func decodeMJPEG(input io.Reader) chan image.Image {
 			tDec.Start()
 			img, err := jpeg.Decode(in)
 			tDec.Stop()
-			if *flagRec != "" {
-				record(img)
-			}
+			//if *flagRec != "" {
+			//	record(img)
+			//}
 			if err != nil {
 				if err.Error() == "unexpected EOF" {
 					close(stream)

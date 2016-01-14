@@ -43,6 +43,10 @@ func main() {
 
 	runProcessing(input)
 
+	for{
+		record(<-output2)
+	}
+
 	if err := serveHTTP(); err != nil {
 		exit(err)
 	}
