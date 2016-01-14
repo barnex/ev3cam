@@ -16,6 +16,7 @@ func serveHTTP() error {
 	return http.ListenAndServe(*flagPort, nil)
 }
 
+// mjpegHandler streams images as MJPEG.
 type mjpegHandler chan image.Image
 
 func (h mjpegHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

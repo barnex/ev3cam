@@ -23,9 +23,9 @@ var (
 
 var (
 	input                     chan image.Image
-	output1                   = make(chan image.Image)
-	output2                   = make(chan image.Image)
-	targetX, targetY, targetM float64
+	output1                   = make(chan image.Image) // input with crosshairs on target
+	output2                   = make(chan image.Image) // processed input with crosshairs
+	targetX, targetY, targetM float64 // target coordinates and mass
 )
 
 func main() {
@@ -53,11 +53,12 @@ func main() {
 }
 
 var (
-	bg        [3]Floats
-	filter    = 0.75
-	threshold = 0.15
+	bg        [3]Floats // background image
+	filter    = 0.75 // background image update rate
+	threshold = 0.15 // motion threshold value (0..1)
 )
 
+// process updates targetX, targetY with the position the moving target.
 func process(in [3]Floats) Floats {
 	tProc.Start()
 	if bg[0] == nil {
@@ -114,6 +115,8 @@ func process(in [3]Floats) Floats {
 	return out
 }
 
+// runProcessing reads images from input, determines the target
+// position, and marks the target out the output channels.
 func runProcessing(input chan image.Image) {
 	go func() {
 		for {
@@ -125,6 +128,7 @@ func runProcessing(input chan image.Image) {
 	}()
 }
 
+// softPush pushes img in ch, if possible. Never blocks.
 func softPush(ch chan image.Image, img image.Image) {
 	select {
 	default:
@@ -132,6 +136,8 @@ func softPush(ch chan image.Image, img image.Image) {
 	}
 }
 
+// toVector turns an image into pixel values between 0 and 1.
+// Employs a gamma of 2, close enough to sRGB to work well.
 func toVector(im image.Image) [3]Floats {
 	img := im.(*image.YCbCr)
 	w := img.Bounds().Max.X
@@ -160,6 +166,7 @@ func sq(x float64) float64 {
 func sqrt(x float64) float64 {
 	return math.Sqrt(x)
 }
+
 func data(x [3]Floats) [3][]float64 {
 	return [3][]float64{x[0].Data(), x[1].Data(), x[2].Data()}
 }

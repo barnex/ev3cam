@@ -5,32 +5,15 @@ import (
 	"image/color"
 )
 
+// Floats turns a matrix into a grayscale image.
 type Floats [][]float64
 
 func (f Floats) At(x, y int) color.Color {
 	return color.Gray16{uint16(clamp(sq(f[y][x])) * 0xffff)}
 }
 
-func clamp(x float64) float64 {
-	if x > 1 {
-		return 1
-	}
-	return x
-}
-
 func (f Floats) ColorModel() color.Model {
-	return color.Gray16Model //??
-}
-
-func (f Floats) Size() (w, h int) {
-	h = len(f)
-	w = len(f[0])
-	return
-}
-
-func (f Floats) Len() int {
-	w, h := f.Size()
-	return w * h
+	return color.Gray16Model
 }
 
 func (f Floats) Bounds() image.Rectangle {
@@ -38,6 +21,21 @@ func (f Floats) Bounds() image.Rectangle {
 	return image.Rect(0, 0, w, h)
 }
 
+// Size is shorthand for getting the image bounds.
+func (f Floats) Size() (w, h int) {
+	h = len(f)
+	w = len(f[0])
+	return
+}
+
+// Len returns the total number of pixels.
+func (f Floats) Len() int {
+	w, h := f.Size()
+	return w * h
+}
+
+
+// Data returns the pixel data as a contiguous list.
 func (f Floats) Data() []float64 {
 	return f[0][:f.Len()]
 }
@@ -58,3 +56,13 @@ func makeVectors(w, h int) [3]Floats {
 	}
 	return v
 }
+
+
+// clamp limits x to at most 1.
+func clamp(x float64) float64 {
+	if x > 1 {
+		return 1
+	}
+	return x
+}
+

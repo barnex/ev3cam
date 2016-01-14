@@ -13,6 +13,8 @@ import (
 
 var rec chan image.Image
 
+// record saves all images from the rec stream as
+// consecutively numbered jpegs.
 func record(img image.Image) {
 	if rec == nil {
 		rec = make(chan image.Image, 10)
@@ -38,6 +40,7 @@ func record(img image.Image) {
 	rec <- img
 }
 
+// streamRecorded streams fake input data from jpegs in dir.
 func streamRecorded(dir string) chan image.Image {
 	input := make(chan image.Image)
 	go func() {
@@ -66,6 +69,7 @@ func streamRecorded(dir string) chan image.Image {
 	return input
 }
 
+// mark draws red crosshairs at targetX, targetY
 func mark(src image.Image) image.Image {
 
 	b := src.Bounds()

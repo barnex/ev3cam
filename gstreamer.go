@@ -13,6 +13,7 @@ import (
 	"syscall"
 )
 
+// openGStreamer runs a gstreamer subcommand and pipes it's output.
 func openGStreamer() (io.Reader, error) {
 	fifo := "fifo" + path.Base(*flagSrc)
 	if err := syscall.Mkfifo(fifo, 0666); err != nil {
@@ -48,6 +49,7 @@ func openGStreamer() (io.Reader, error) {
 	return f, nil
 }
 
+// decodeMJPEG turns gstreamer 'jpegenc' output into a stream of images.
 func decodeMJPEG(input io.Reader) chan image.Image {
 	stream := make(chan image.Image)
 	go func() {
@@ -82,6 +84,7 @@ func decodeMJPEG(input io.Reader) chan image.Image {
 	return stream
 }
 
+// reader counts the total bytes read
 type reader struct {
 	in io.Reader
 }
