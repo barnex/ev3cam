@@ -22,11 +22,10 @@ var (
 )
 
 var (
-	input   chan image.Image
-	output1 = make(chan image.Image)
-	output2 = make(chan image.Image)
-	targetX float64
-	targetY float64
+	input                     chan image.Image
+	output1                   = make(chan image.Image)
+	output2                   = make(chan image.Image)
+	targetX, targetY, targetM float64
 )
 
 func main() {
@@ -61,7 +60,8 @@ func process(in [3]Floats) Floats {
 		bg = in
 	}
 
-	out := makeFloats(in[0].Size())
+	w, h := in[0].Size()
+	out := makeFloats(w, h)
 	OUT := out.Data()
 	IN := data(in)
 	BG := data(bg)
@@ -71,7 +71,6 @@ func process(in [3]Floats) Floats {
 		if diff > threshold {
 			OUT[i] = 1
 		}
-		//OUT[i] = diff
 	}
 
 	for c := range bg {
@@ -91,8 +90,20 @@ func process(in [3]Floats) Floats {
 		}
 	}
 	if n > 0 {
-		targetX = (sX / n)
-		targetY = (sY / n)
+		tX := (sX / n)
+		tY := (sY / n)
+		//m := float64(n)
+
+		filterX := 1.0
+		filterY := 0.3
+		frac := float64(n) / float64(w*h)
+		if frac < 0.003 {
+			filterX = 0.1
+			filterY = 0.1
+		}
+
+		targetX = (1-filterX)*targetX + filterX*tX
+		targetY = (1-filterY)*targetY + filterY*tY
 	}
 
 	tProc.Stop()
@@ -104,16 +115,17 @@ func runProcessing(input chan image.Image) {
 		for {
 			img := <-input
 			x := process(toVector(img))
-			select {
-			default:
-			case output1 <- mark(img):
-			}
-			select {
-			default:
-			case output2 <- mark(x):
-			}
+			softPush(output1, mark(img))
+			softPush(output2, mark(x))
 		}
 	}()
+}
+
+func softPush(ch chan image.Image, img image.Image) {
+	select {
+	default:
+	case ch <- img:
+	}
 }
 
 func toVector(im image.Image) [3]Floats {
